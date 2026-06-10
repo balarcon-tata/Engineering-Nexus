@@ -98,6 +98,10 @@
       Actualizar base de datos
     </button>
 
+    <div id="lastUpdate" class="status">
+      Última actualización: consultando...
+    </div>
+    
     <div id="status" class="status">
       Esperando archivo...
     </div>
@@ -115,10 +119,45 @@
     const fileInput = document.getElementById("excelFile");
     const uploadBtn = document.getElementById("uploadBtn");
     const statusBox = document.getElementById("status");
+    const lastUpdateBox = document.getElementById("lastUpdate");
+    const PROCESO_ACTUALIZACION = "RUTAS_ACTIVAS";
 
     function setStatus(message, type = "") {
       statusBox.className = "status " + type;
       statusBox.textContent = message;
+    }
+
+    async function cargarUltimaActualizacion() {
+      const { data } = await supabaseClient
+        .from("control_actualizaciones")
+        .select("fecha_actualizacion, registros")
+        .eq("proceso", PROCESO_ACTUALIZACION)
+        .single();
+    
+      if (!data) {
+        lastUpdateBox.textContent = "Última actualización: nunca";
+        return;
+      }
+    
+      const fecha = new Date(
+        data.fecha_actualizacion
+      ).toLocaleString("es-GT");
+    
+      lastUpdateBox.textContent =
+        `Última actualización: ${fecha}
+    Registros cargados: ${data.registros ?? "N/D"}`;
+    }
+    
+    async function guardarRegistroActualizacion(registros) {
+      const { error } = await supabaseClient
+        .from("control_actualizaciones")
+        .upsert({
+          proceso: PROCESO_ACTUALIZACION,
+          fecha_actualizacion: new Date().toISOString(),
+          registros
+        });
+    
+      if (error) throw error;
     }
 
     function excelDateToISO(value) {
@@ -254,6 +293,9 @@
           }
         }
 
+        await guardarRegistroActualizacion(registros.length);
+        await cargarUltimaActualizacion();
+        
         setStatus(
           `Actualización completada correctamente.\n\nRegistros cargados: ${registros.length}\nHoja procesada: ${sheetName}`,
           "ok"
@@ -269,6 +311,7 @@
         uploadBtn.disabled = false;
       }
     });
+    cargarUltimaActualizacion();
   </script>
 </body>
 </html>
