@@ -267,40 +267,32 @@
           throw new Error("No se generaron registros válidos para insertar.");
         }
 
-        throw new Error("Carga temporalmente bloqueada para proteger los registros actuales. El reemplazo seguro necesita autenticación de administrador. No se eliminó ningún registro.");
-
-        const { error: deleteError } = await supabaseClient
-          .from("rutas_activas")
-          .delete()
-          .neq("id", 0);
-
-        if (deleteError) {
-          throw deleteError;
+        const { data: auth } = await supabaseClient.auth.getUser();
+        if (auth?.user?.email?.toLowerCase() !== "balarcon@tata.com.gt") {
+          throw new Error("Inicia sesión con el correo administrativo para actualizar rutas.");
         }
-
-        const chunks = chunkArray(registros, 500);
-
-        for (let i = 0; i < chunks.length; i++) {
-          setStatus(
-            `Insertando datos en Supabase...\nBloque ${i + 1} de ${chunks.length}\nRegistros totales: ${registros.length}`
-          );
-
-          const { error: insertError } = await supabaseClient
-            .from("rutas_activas")
-            .insert(chunks[i]);
-
-          if (insertError) {
-            throw insertError;
+        const lote = crypto.randomUUID();
+        const rutas = new Set();
+        for (const r of registros) {
+          if (!Number.isSafeInteger(r.id_ruta) || rutas.has(r.id_ruta)) {
+            throw new Error("El Excel contiene ID Ruta vacío, inválido o repetido. No se cambió la tabla.");
           }
+          rutas.add(r.id_ruta);
         }
-
-        await guardarRegistroActualizacion(registros.length);
-        await cargarUltimaActualizacion();
-        
-        setStatus(
-          `Actualización completada correctamente.\n\nRegistros cargados: ${registros.length}\nHoja procesada: ${sheetName}`,
-          "ok"
+        for (let i = 0; i < registros.length; i += 300) {
+          const bloque = registros.slice(i, i + 300).map(r => ({...r, lote_id: lote}));
+          const { error } = await supabaseClient.from("rutas_activas_importacion").insert(bloque);
+          if (error) throw new Error("Bloque " + (Math.floor(i / 300) + 1) + ": " + error.message);
+          setStatus("Subiendo archivo: " + Math.min(i + 300, registros.length) + " / " + registros.length);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        setStatus("Validando integridad y aplicando los registros...");
+        const { data: total, error: finError } = await supabaseClient.rpc(
+          "finalizar_rutas_activas_lote", {p_lote_id: lote, p_registros: registros.length}
         );
+        if (finError) throw finError;
+        await cargarUltimaActualizacion();
+        setStatus("Actualización completada. Registros: " + total, "ok");
 
       } catch (error) {
         console.error(error);
