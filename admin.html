@@ -34,7 +34,7 @@ progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color
 const URL_API="https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activas-importador";
 const SUPABASE_URL="https://ezhlltgcqektrclgzhfi.supabase.co";
 const SUPABASE_KEY="sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
-const PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || "";
+const PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || new URLSearchParams(location.search).get("access") || "";
 const fileInput=document.getElementById("excelFile");
 const uploadBtn=document.getElementById("uploadBtn");
 const statusEl=document.getElementById("status");
