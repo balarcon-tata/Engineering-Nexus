@@ -92,6 +92,9 @@
       y reemplazará la tabla completa en Supabase.
     </p>
 
+    <div class="status" id="authStatus">Comprobando acceso administrativo...</div>
+    <button type="button" id="loginBtn">Enviar enlace de acceso al correo administrativo</button>
+    <button type="button" id="logoutBtn" style="display:none">Cerrar sesión</button>
     <input type="file" id="excelFile" accept=".xlsx,.xls" />
 
     <button id="uploadBtn">
@@ -122,6 +125,29 @@
     const lastUpdateBox = document.getElementById("lastUpdate");
     const PROCESO_ACTUALIZACION = "RUTAS_ACTIVAS";
 
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const authStatus = document.getElementById("authStatus");
+    async function refrescarAcceso() {
+      const {data} = await supabaseClient.auth.getUser();
+      const autorizado = data?.user?.email?.toLowerCase() === "balarcon@tata.com.gt";
+      authStatus.textContent = autorizado ? "Acceso administrativo activo" : "Acceso restringido: inicia sesión con el correo administrativo.";
+      loginBtn.style.display = autorizado ? "none" : "block";
+      logoutBtn.style.display = autorizado ? "block" : "none";
+      uploadBtn.disabled = !autorizado;
+    }
+    loginBtn.addEventListener("click", async () => {
+      loginBtn.disabled = true;
+      const {error} = await supabaseClient.auth.signInWithOtp({
+        email: "balarcon@tata.com.gt",
+        options: { emailRedirectTo: location.origin + location.pathname }
+      });
+      authStatus.textContent = error ? "No se pudo enviar enlace: " + error.message : "Revisa el correo corporativo y abre el enlace de acceso.";
+      loginBtn.disabled = false;
+    });
+    logoutBtn.addEventListener("click", async () => {await supabaseClient.auth.signOut(); await refrescarAcceso();});
+    supabaseClient.auth.onAuthStateChange(() => setTimeout(refrescarAcceso, 0));
+    refrescarAcceso();
     function setStatus(message, type = "") {
       statusBox.className = "status " + type;
       statusBox.textContent = message;
