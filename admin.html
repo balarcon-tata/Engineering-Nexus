@@ -1,336 +1,174 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Actualizar Rutas Activas | TATA</title>
-
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: Arial, sans-serif;
-      background: #090b0f;
-      color: #f6f7fb;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-    }
-
-    .card {
-      width: min(720px, 100%);
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.16);
-      border-radius: 14px;
-      padding: 28px;
-      box-shadow: 0 24px 80px rgba(0,0,0,0.35);
-    }
-
-    h1 {
-      margin-top: 0;
-      font-size: 2rem;
-    }
-
-    p {
-      color: #aeb6c2;
-      line-height: 1.5;
-    }
-
-    input, button {
-      width: 100%;
-      min-height: 46px;
-      margin-top: 14px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.18);
-      padding: 10px 14px;
-      font-size: 1rem;
-    }
-
-    input {
-      background: rgba(255,255,255,0.08);
-      color: #fff;
-    }
-
-    button {
-      cursor: pointer;
-      background: linear-gradient(135deg, #b3202d, #ff4255);
-      color: white;
-      font-weight: 800;
-      border: 0;
-    }
-
-    button:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-
-    .status {
-      margin-top: 18px;
-      padding: 14px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.07);
-      color: #d9dee8;
-      white-space: pre-wrap;
-    }
-
-    .ok { color: #9ff0c5; }
-    .error { color: #ff9aa5; }
-    .warn { color: #ffd68c; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TATA | Actualizar Rutas Activas</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,Arial,sans-serif;color:#f8f9fa;background:#090b0f;display:grid;place-items:center;padding:20px}
+.card{width:min(780px,100%);border:1px solid #343942;border-radius:15px;background:#1b1d22;padding:clamp(18px,4vw,34px);box-shadow:0 25px 80px #0007}
+h1{font-size:clamp(25px,4vw,36px);margin:0 0 18px}p{color:#aeb5c2;line-height:1.55}
+label{display:block;font-size:14px;color:#d9dee8;font-weight:700;margin-top:19px;margin-bottom:8px}
+input{width:100%;background:#2d3035;color:white;border:1px solid #51545b;border-radius:9px;padding:13px 14px;font-size:15px;min-height:48px}
+input[type=file]{padding:11px}button{width:100%;margin-top:19px;border:0;border-radius:9px;min-height:49px;font-size:16px;font-weight:750;color:#fff;background:linear-gradient(105deg,#b02030,#ff3b55);cursor:pointer}
+button:disabled{opacity:.55;cursor:not-allowed}.status{border-radius:9px;padding:14px 16px;background:#2d3035;margin-top:15px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.error{color:#ff9ba4}.ok{color:#a2e7c2}.warn{color:#ffd68c}.muted{color:#aeb5c2}
+progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color:#aeb5c2}
+</style>
 </head>
-
 <body>
-  <main class="card">
-    <h1>Actualizar Rutas Activas</h1>
-
-    <p>
-      Selecciona el archivo <strong>DP070 - Rutas Activas.xlsx</strong>.
-      El sistema ignorará la primera fila, leerá los encabezados desde la segunda fila
-      y reemplazará la tabla completa en Supabase.
-    </p>
-
-    <div class="status" id="authStatus">Comprobando acceso administrativo...</div>
-    <button type="button" id="loginBtn">Enviar enlace de acceso al correo administrativo</button>
-    <button type="button" id="logoutBtn" style="display:none">Cerrar sesión</button>
-    <input type="file" id="excelFile" accept=".xlsx,.xls" />
-
-    <button id="uploadBtn">
-      Actualizar base de datos
-    </button>
-
-    <div id="lastUpdate" class="status">
-      Última actualización: consultando...
-    </div>
-    
-    <div id="status" class="status">
-      Esperando archivo...
-    </div>
-  </main>
-
-  <script>
-    const SUPABASE_URL = "https://ezhlltgcqektrclgzhfi.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
-
-    const supabaseClient = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_KEY
-    );
-
-    const fileInput = document.getElementById("excelFile");
-    const uploadBtn = document.getElementById("uploadBtn");
-    const statusBox = document.getElementById("status");
-    const lastUpdateBox = document.getElementById("lastUpdate");
-    const PROCESO_ACTUALIZACION = "RUTAS_ACTIVAS";
-
-    const loginBtn = document.getElementById("loginBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const authStatus = document.getElementById("authStatus");
-    async function refrescarAcceso() {
-      const {data} = await supabaseClient.auth.getUser();
-      const autorizado = data?.user?.email?.toLowerCase() === "balarcon@tata.com.gt";
-      authStatus.textContent = autorizado ? "Acceso administrativo activo" : "Acceso restringido: inicia sesión con el correo administrativo.";
-      loginBtn.style.display = autorizado ? "none" : "block";
-      logoutBtn.style.display = autorizado ? "block" : "none";
-      uploadBtn.disabled = !autorizado;
-    }
-    loginBtn.addEventListener("click", async () => {
-      loginBtn.disabled = true;
-      const {error} = await supabaseClient.auth.signInWithOtp({
-        email: "balarcon@tata.com.gt",
-        options: { emailRedirectTo: location.origin + location.pathname }
-      });
-      authStatus.textContent = error ? "No se pudo enviar enlace: " + error.message : "Revisa el correo corporativo y abre el enlace de acceso.";
-      loginBtn.disabled = false;
-    });
-    logoutBtn.addEventListener("click", async () => {await supabaseClient.auth.signOut(); await refrescarAcceso();});
-    supabaseClient.auth.onAuthStateChange(() => setTimeout(refrescarAcceso, 0));
-    refrescarAcceso();
-    function setStatus(message, type = "") {
-      statusBox.className = "status " + type;
-      statusBox.textContent = message;
-    }
-
-    async function cargarUltimaActualizacion() {
-      const { data } = await supabaseClient
-        .from("control_actualizaciones")
-        .select("fecha_actualizacion, registros")
-        .eq("proceso", PROCESO_ACTUALIZACION)
-        .single();
-    
-      if (!data) {
-        lastUpdateBox.textContent = "Última actualización: nunca";
-        return;
-      }
-    
-      const fecha = new Date(
-        data.fecha_actualizacion
-      ).toLocaleString("es-GT");
-    
-      lastUpdateBox.textContent =
-        `Última actualización: ${fecha}
-    Registros cargados: ${data.registros ?? "N/D"}`;
-    }
-    
-    async function guardarRegistroActualizacion(registros) {
-      const { error } = await supabaseClient
-        .from("control_actualizaciones")
-        .upsert({
-          proceso: PROCESO_ACTUALIZACION,
-          fecha_actualizacion: new Date().toISOString(),
-          registros
-        });
-    
-      if (error) throw error;
-    }
-
-    function excelDateToISO(value) {
-      if (!value) return null;
-
-      if (value instanceof Date) {
-        return value.toISOString();
-      }
-
-      if (typeof value === "number") {
-        const date = XLSX.SSF.parse_date_code(value);
-        if (!date) return null;
-
-        const jsDate = new Date(
-          Date.UTC(date.y, date.m - 1, date.d, date.H || 0, date.M || 0, date.S || 0)
-        );
-
-        return jsDate.toISOString();
-      }
-
-      const parsed = new Date(value);
-      if (!isNaN(parsed)) return parsed.toISOString();
-
-      return null;
-    }
-
-    function cleanNumber(value) {
-      if (value === undefined || value === null || value === "") return null;
-
-      if (typeof value === "number") return value;
-
-      const cleaned = String(value)
-        .replace(",", ".")
-        .trim();
-
-      const number = Number(cleaned);
-
-      return isNaN(number) ? null : number;
-    }
-
-    function cleanText(value) {
-      if (value === undefined || value === null) return null;
-      return String(value).trim();
-    }
-
-    function chunkArray(array, size) {
-      const chunks = [];
-
-      for (let i = 0; i < array.length; i += size) {
-        chunks.push(array.slice(i, i + size));
-      }
-
-      return chunks;
-    }
-
-    uploadBtn.addEventListener("click", async () => {
-      try {
-        const file = fileInput.files[0];
-
-        if (!file) {
-          setStatus("Selecciona primero el archivo Excel.", "warn");
-          return;
-        }
-
-        uploadBtn.disabled = true;
-        setStatus("Leyendo archivo Excel...");
-
-        const arrayBuffer = await file.arrayBuffer();
-
-        const workbook = XLSX.read(arrayBuffer, {
-          type: "array",
-          cellDates: true
-        });
-
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-
-        if (!sheet["!ref"]) { const addresses = Object.keys(sheet).filter(k => /^[A-Z]+[0-9]+$/.test(k)); if (addresses.length) { const last = addresses.reduce((a,k) => Math.max(a, XLSX.utils.decode_cell(k).r), 0); sheet["!ref"] = "A1:K" + (last + 1); } }
-        const rows = XLSX.utils.sheet_to_json(sheet, {
-          range: 1,
-          defval: null
-        });
-
-        if (!rows.length) {
-          throw new Error("No se encontraron datos. Revisa que el archivo tenga información desde la fila 3.");
-        }
-
-        setStatus(`Archivo leído correctamente.\nFilas detectadas: ${rows.length}\nPreparando registros...`);
-
-        const registros = rows
-          .map(row => ({
-            id_ruta: cleanNumber(row["ID Ruta"]),
-            fecha_creacion: excelDateToISO(row["Fecha de Creación"]),
-            estilo: cleanNumber(row["Estilo"]),
-            id_sam: cleanNumber(row["ID SAM"]),
-            etapa: cleanText(row["Etapa"]),
-            id_operacion: cleanNumber(row["ID Operación"]),
-            operacion: cleanText(row["Operación"]),
-            secuencia: cleanNumber(row["Sequencia"]),
-            etapa_operacion: cleanText(row["Etapa Operación"]),
-            sah: cleanNumber(row["SAH"]),
-            sam: cleanNumber(row["SAM"])
-          }))
-          .filter(row => row.id_ruta !== null || row.id_sam !== null || row.operacion !== null);
-
-        if (!registros.length) {
-          throw new Error("No se generaron registros válidos para insertar.");
-        }
-
-        const { data: auth } = await supabaseClient.auth.getUser();
-        if (auth?.user?.email?.toLowerCase() !== "balarcon@tata.com.gt") {
-          throw new Error("Inicia sesión con el correo administrativo para actualizar rutas.");
-        }
-        const lote = crypto.randomUUID();
-        const rutas = new Set();
-        for (const r of registros) {
-          if (!Number.isSafeInteger(r.id_ruta) || rutas.has(r.id_ruta)) {
-            throw new Error("El Excel contiene ID Ruta vacío, inválido o repetido. No se cambió la tabla.");
-          }
-          rutas.add(r.id_ruta);
-        }
-        for (let i = 0; i < registros.length; i += 300) {
-          const bloque = registros.slice(i, i + 300).map(r => ({...r, lote_id: lote}));
-          const { error } = await supabaseClient.from("rutas_activas_importacion").insert(bloque);
-          if (error) throw new Error("Bloque " + (Math.floor(i / 300) + 1) + ": " + error.message);
-          setStatus("Subiendo archivo: " + Math.min(i + 300, registros.length) + " / " + registros.length);
-          await new Promise(resolve => setTimeout(resolve, 0));
-        }
-        setStatus("Validando integridad y aplicando los registros...");
-        const { data: total, error: finError } = await supabaseClient.rpc(
-          "finalizar_rutas_activas_lote", {p_lote_id: lote, p_registros: registros.length}
-        );
-        if (finError) throw finError;
-        await cargarUltimaActualizacion();
-        setStatus("Actualización completada. Registros: " + total, "ok");
-
-      } catch (error) {
-        console.error(error);
-        setStatus(
-          "Error al actualizar la base de datos:\n\n" + error.message,
-          "error"
-        );
-      } finally {
-        uploadBtn.disabled = false;
-      }
-    });
-    cargarUltimaActualizacion();
-  </script>
+<main class="card">
+<h1>Actualizar Rutas Activas</h1>
+<p>Carga el reporte <strong>DP070 - Rutas Activas.xlsx</strong>. Se tomarán los encabezados de la fila 2 y los datos desde la fila 3. La información anterior se conserva hasta completar y validar la importación.</p>
+<label for="code">Código de actualización</label>
+<input id="code" type="password" placeholder="Pega el código de administración" autocomplete="off" spellcheck="false">
+<small>No necesitas recibir ningún enlace por correo. El código no se guarda en el navegador.</small>
+<label for="excelFile">Archivo Excel</label>
+<input type="file" id="excelFile" accept=".xlsx,.xls">
+<button id="uploadBtn">Actualizar base de datos</button>
+<progress id="progress" max="100" value="0" hidden></progress>
+<div id="lastUpdate" class="status">Consultando última actualización...</div>
+<div id="status" class="status muted">Selecciona el archivo y escribe el código para empezar.</div>
+</main>
+<script>
+(() => {
+"use strict";
+const URL_API="https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activas-importador";
+const SUPABASE_URL="https://ezhlltgcqektrclgzhfi.supabase.co";
+const SUPABASE_KEY="sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
+const codeInput=document.getElementById("code");
+const fileInput=document.getElementById("excelFile");
+const uploadBtn=document.getElementById("uploadBtn");
+const statusEl=document.getElementById("status");
+const lastEl=document.getElementById("lastUpdate");
+const progress=document.getElementById("progress");
+function status(msg,kind=""){statusEl.className="status "+kind;statusEl.textContent=msg}
+function fraction(num){progress.hidden=false;progress.value=Math.max(0,Math.min(100,num))}
+function cleanNumber(x){
+ if(x===null||x===undefined||x==="")return null;
+ const n=typeof x==="number"?x:Number(String(x).trim().replace(",","."));
+ return Number.isFinite(n)?n:null;
+}
+function cleanText(x){return x===undefined||x===null?null:String(x).trim()}
+function excelDate(x){
+ if(x===null||x===undefined||x==="")return null;
+ if(x instanceof Date) return x.toISOString();
+ if(typeof x==="number"){
+  const p=XLSX.SSF.parse_date_code(x);
+  if(!p)return null;
+  const seconds=p.S||0;
+  return new Date(Date.UTC(p.y,p.m-1,p.d,p.H||0,p.M||0,Math.floor(seconds),Math.round((seconds%1)*1000))).toISOString();
+ }
+ const date=new Date(x);return isNaN(date.getTime())?null:date.toISOString();
+}
+function normalize(x){return String(x??"").trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
+async function send(action, key, payload={}){
+ const response=await fetch(URL_API,{
+  method:"POST",mode:"cors",cache:"no-store",
+  headers:{"content-type":"application/json","x-rutas-secret":key},
+  body:JSON.stringify({action,...payload})
+ });
+ let info;
+ try{info=await response.json()}catch{throw new Error("El servidor no devolvió una respuesta válida (HTTP "+response.status+").")}
+ if(!response.ok||!info.ok)throw new Error(info.error||"Error HTTP "+response.status);
+ return info;
+}
+async function lastUpdate(){
+ try{
+  const res=await fetch(SUPABASE_URL+"/rest/v1/control_actualizaciones?proceso=eq.RUTAS_ACTIVAS&select=fecha_actualizacion,registros",{
+   headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY},cache:"no-store"
+  });
+  const list=await res.json();
+  if(!res.ok||!list.length)throw new Error("Sin información");
+  lastEl.textContent="Última actualización: "+new Date(list[0].fecha_actualizacion).toLocaleString("es-GT")
+   +"\nRegistros cargados: "+Number(list[0].registros).toLocaleString("es-GT");
+ }catch{lastEl.textContent="No se pudo consultar la última actualización."}
+}
+function cell(sheet,r,c) {
+ const entry=Array.isArray(sheet)?sheet[r]?.[c]:sheet[XLSX.utils.encode_cell({r,c})];
+ return entry?.v??null;
+}
+function rowRecord(sheet,r){
+ const v=c=>cell(sheet,r,c);
+ return {
+  id_ruta:cleanNumber(v(0)),
+  fecha_creacion:excelDate(v(1)),
+  estilo:cleanNumber(v(2)),
+  id_sam:cleanNumber(v(3)),
+  etapa:cleanText(v(4)),
+  id_operacion:cleanNumber(v(5)),
+  operacion:cleanText(v(6)),
+  secuencia:cleanNumber(v(7)),
+  etapa_operacion:cleanText(v(8)),
+  sah:cleanNumber(v(9)),
+  sam:cleanNumber(v(10))
+ };
+}
+async function main(){
+ const key=codeInput.value.trim();
+ const file=fileInput.files?.[0];
+ if(!key){status("Escribe el código de actualización.","warn");return}
+ if(!file){status("Selecciona primero el archivo DP070.","warn");return}
+ uploadBtn.disabled=true;
+ fraction(0);
+ try{
+  status("Validando autorización del servidor...");
+  await send("verify",key);
+  if(typeof XLSX==="undefined")throw new Error("No se pudo cargar el lector de Excel. Verifica la conexión a internet.");
+  status("Leyendo el Excel. Archivos grandes pueden necesitar bastante memoria...");
+  const bytes=await file.arrayBuffer();
+  const book=XLSX.read(bytes,{type:"array",dense:true,cellDates:false,cellStyles:false,cellNF:false});
+  const sheet=book.Sheets[book.SheetNames[0]];
+  if(!sheet)throw new Error("El archivo no tiene hoja de trabajo.");
+  const dense=Array.isArray(sheet)?sheet:(Array.isArray(sheet["!data"])?sheet["!data"]:null);
+  if(!dense)throw new Error("No se logró leer la hoja en formato de filas. Vuelve a exportar DP070.");
+  const headers=["ID Ruta","Fecha de Creación","Estilo","ID SAM","Etapa","ID Operación","Operación","Sequencia","Etapa Operación","SAH","SAM"];
+  for(let j=0;j<headers.length;j++){
+   if(normalize(cell(dense,1,j))!==normalize(headers[j]))
+    throw new Error("Encabezado incorrecto en "+String.fromCharCode(65+j)+"2. Se esperaba: "+headers[j]);
+  }
+  const total=dense.length-2;
+  if(total<1)throw new Error("No existen datos desde la fila 3.");
+  const unique=new Set();
+  status("Excel leído: "+total.toLocaleString("es-GT")+" filas.\nComprobando ID Ruta...");
+  for(let r=2;r<dense.length;r++){
+    const id=cleanNumber(cell(dense,r,0));
+    if(!Number.isSafeInteger(id)||id<=0)throw new Error("ID Ruta inválido en fila "+(r+1));
+    if(unique.has(id))throw new Error("ID Ruta duplicado "+id+" en fila "+(r+1));
+    unique.add(id);
+    if(r%10000===0)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  unique.clear();
+  const lote=crypto.randomUUID();
+  let done=0;
+  const batchSize=700;
+  for(let r=2;r<dense.length;r+=batchSize){
+   const end=Math.min(r+batchSize,dense.length);
+   const rows=[];
+   for(let i=r;i<end;i++)rows.push(rowRecord(dense,i));
+   await send("batch",key,{lote,rows});
+   done+=rows.length;
+   fraction(5+90*done/total);
+   status("Subiendo a la zona temporal: "+done.toLocaleString("es-GT")+" / "+total.toLocaleString("es-GT")+
+    "\nLa información vigente sigue intacta.");
+   await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  status("Todas las filas cargadas. Aplicando actualización validada...");
+  const result=await send("finalize",key,{lote,total});
+  fraction(100);
+  await lastUpdate();
+  status("Actualización terminada correctamente.\nRegistros: "+Number(result.count).toLocaleString("es-GT")+
+    "\nArchivo: "+file.name,"ok");
+ }catch(err){
+  console.error("Fallo de importación:",err);
+  status("No se completó la actualización.\n"+(err?.message||String(err))+
+   "\n\nLos datos anteriores permanecen sin cambios si falló antes de la aplicación final.","error");
+ }finally{uploadBtn.disabled=false;codeInput.value=""}
+}
+uploadBtn.addEventListener("click",main);
+lastUpdate();
+})();
+</script>
 </body>
 </html>
