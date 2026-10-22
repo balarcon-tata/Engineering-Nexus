@@ -267,7 +267,7 @@
           throw new Error("No se generaron registros válidos para insertar.");
         }
 
-        setStatus(`Registros preparados: ${registros.length}\nEliminando datos anteriores...`);
+        throw new Error("Carga temporalmente bloqueada para proteger los registros actuales. El reemplazo seguro necesita autenticación de administrador. No se eliminó ningún registro.");
 
         const { error: deleteError } = await supabaseClient
           .from("rutas_activas")
