@@ -104,6 +104,97 @@ function rowRecord(sheet,r){
   sam:cleanNumber(v(10))
  };
 }
+
+async function finishImport(key,lote,total,fileName){
+  status("Archivo recibido: "+total.toLocaleString("es-GT")+" rutas. Esperando procesamiento seguro...");
+  await send("finalize",key,{lote,total});
+  fraction(96);
+  for(let attempt=0;attempt<180;attempt++){
+    await new Promise(resolve=>setTimeout(resolve,2000));
+    const check=await send("status",key,{lote});
+    if(check.estado==="completed"){
+      fraction(100);
+      await lastUpdate();
+      status("Actualización completada correctamente.\nRegistros: "+Number(check.resultado).toLocaleString("es-GT")+"\nArchivo: "+fileName,"ok");
+      return;
+    }
+    if(check.estado==="failed")throw new Error(check.error||"Falló la aplicación final.");
+    status("Archivo recibido: "+total.toLocaleString("es-GT")+" rutas.\nEstado: "+(check.estado==="pending"?"en cola":"aplicando cambios")+".");
+  }
+  status("El servidor sigue procesando la actualización. Consulta la última actualización para confirmar el resultado.","warn");
+}
+function csvRecord(v){
+  const raw=String(v[1]??"").trim();
+  const dateValue=/^\d+(?:\.\d+)?$/.test(raw)?Number(raw):raw;
+  return {
+    id_ruta:cleanNumber(v[0]),fecha_creacion:excelDate(dateValue),
+    estilo:cleanNumber(v[2]),id_sam:cleanNumber(v[3]),
+    etapa:cleanText(v[4]),id_operacion:cleanNumber(v[5]),
+    operacion:cleanText(v[6]),secuencia:cleanNumber(v[7]),
+    etapa_operacion:cleanText(v[8]),sah:cleanNumber(v[9]),sam:cleanNumber(v[10])
+  };
+}
+async function uploadCsv(file,key){
+  if(typeof Papa==="undefined")throw new Error("No se pudo cargar el lector CSV. Comprueba tu conexión.");
+  const expected=["ID Ruta","Fecha de Creación","Estilo","ID SAM","Etapa","ID Operación","Operación","Sequencia","Etapa Operación","SAH","SAM"];
+  const lote=crypto.randomUUID(),seen=new Set();
+  let line=0,total=0,uploaded=0,hasHeader=false,batch=[],failed=false;
+  status("Leyendo CSV por fragmentos sin cargar todo el archivo en memoria...");
+  await new Promise((resolve,reject)=>{
+    const fail=(err,parser)=>{
+      if(failed)return;
+      failed=true;
+      if(parser)parser.abort();
+      reject(err instanceof Error?err:new Error(String(err)));
+    };
+    const flush=async()=>{
+      if(!batch.length)return;
+      const rows=batch;batch=[];
+      await send("batch",key,{lote,rows});
+      uploaded+=rows.length;
+      status("CSV: "+uploaded.toLocaleString("es-GT")+" rutas enviadas por bloques.\nLa información vigente sigue intacta.");
+    };
+    Papa.parse(file,{
+      delimiter:",",skipEmptyLines:"greedy",worker:false,encoding:"UTF-8",chunkSize:1024*1024,
+      step(result,parser){
+        if(failed)return;
+        try{
+          if(result.errors?.length)throw new Error("CSV fila "+(line+1)+": "+result.errors[0].message);
+          const v=result.data;line++;
+          if(!hasHeader){
+            if(line===1 && normalize(v[0])==="rutas activas")return;
+            if(expected.some((h,i)=>normalize(v[i])!==normalize(h)))
+              throw new Error("Los encabezados del CSV no coinciden con DP070, fila "+line);
+            hasHeader=true;return;
+          }
+          if(v.length!==11)throw new Error("La fila "+line+" tiene "+v.length+" columnas; se esperan 11.");
+          const record=csvRecord(v);
+          if(!Number.isSafeInteger(record.id_ruta)||record.id_ruta<=0)throw new Error("ID Ruta inválido en fila "+line);
+          if(!record.fecha_creacion)throw new Error("Fecha inválida en fila "+line);
+          if(seen.has(record.id_ruta))throw new Error("ID Ruta duplicado en fila "+line);
+          seen.add(record.id_ruta);batch.push(record);total++;
+          if(batch.length>=700){
+            parser.pause();
+            flush().then(()=>{if(!failed)parser.resume()}).catch(err=>fail(err,parser));
+          }
+        }catch(err){fail(err,parser)}
+      },
+      complete(){
+        if(failed)return;
+        (async()=>{
+          if(!hasHeader)throw new Error("CSV sin encabezados válidos.");
+          await flush();
+          if(!total||uploaded!==total)throw new Error("La carga CSV quedó incompleta.");
+          resolve();
+        })().catch(err=>fail(err));
+      },
+      error(err){fail(err)}
+    });
+  });
+  seen.clear();
+  await finishImport(key,lote,uploaded,file.name);
+}
+
 async function main(){
  const key=PRIVATE_ACCESS;
  const file=fileInput.files?.[0];
