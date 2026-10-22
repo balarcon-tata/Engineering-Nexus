@@ -205,6 +205,7 @@ async function main(){
  try{
   status("Validando autorización del servidor...");
   await send("verify",key);
+  if(/\.csv$/i.test(file.name)) { await uploadCsv(file,key); return; }
   if(typeof XLSX==="undefined")throw new Error("No se pudo cargar el lector de Excel. Verifica la conexión a internet.");
   status("Leyendo el Excel. Archivos grandes pueden necesitar bastante memoria...");
   const bytes=await file.arrayBuffer();
@@ -245,24 +246,8 @@ async function main(){
    await new Promise(resolve=>setTimeout(resolve,0));
   }
   status("Todas las filas cargadas. Aplicando actualización validada...");
-  await send("finalize",key,{lote,total});
-  fraction(96);
-  status("Archivo cargado. Supabase está aplicando la actualización. Verificando resultado...");
-  let completed=false;
-  for(let attempt=0;attempt<180;attempt++){
-    await new Promise(resolve=>setTimeout(resolve,2000));
-    const check=await send("status",key,{lote});
-    if(check.estado==="completed"){
-      completed=true;
-      fraction(100);
-      await lastUpdate();
-      status("Actualización completada correctamente.\nRegistros: "+Number(check.resultado).toLocaleString("es-GT")+"\nArchivo: "+file.name,"ok");
-      break;
-    }
-    if(check.estado==="failed")throw new Error(check.error||"Falló la aplicación final del lote.");
-    status("Archivo subido: "+total.toLocaleString("es-GT")+" registros.\nEstado: "+(check.estado==="pending"?"en cola":"aplicando cambios")+"\nLa tabla anterior permanece disponible hasta terminar.");
-  }
-  if(!completed)status("Archivo subido y en proceso. Puedes revisar la última actualización en la página más tarde.","warn");
+  await finishImport(key,lote,total,file.name);
+
  }catch(err){
   console.error("Fallo de importación:",err);
   status("No se completó la actualización.\n"+(err?.message||String(err))+
