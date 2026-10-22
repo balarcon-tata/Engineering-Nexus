@@ -35,6 +35,7 @@ const URL_API="https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activ
 const SUPABASE_URL="https://ezhlltgcqektrclgzhfi.supabase.co";
 const SUPABASE_KEY="sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
 const PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || new URLSearchParams(location.search).get("access") || sessionStorage.getItem("tata_rutas_access") || "";
+if(PRIVATE_ACCESS) { try { sessionStorage.setItem("tata_rutas_access",PRIVATE_ACCESS); } catch(_) {} }
 const fileInput=document.getElementById("excelFile");
 const uploadBtn=document.getElementById("uploadBtn");
 const statusEl=document.getElementById("status");
