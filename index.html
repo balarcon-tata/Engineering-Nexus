@@ -1650,7 +1650,7 @@
           <div class="admin-loading">Cargando administrador...</div>
           <iframe
             class="admin-frame"
-            src="https://balarcon-tata.github.io/Engineering-Nexus/admin.html"
+            src="admin.html?v=20261022-r7"
             title="Actualizador de base de datos de SAMs"
             loading="lazy">
           </iframe>
@@ -1896,5 +1896,20 @@
 })();
 </script>
 
+
+<script>
+(function(){
+  const p=new URLSearchParams(location.search);
+  const fromLink=p.get("access");
+  if(fromLink && /^[a-zA-Z0-9_-]{24,160}$/.test(fromLink)){
+    try{localStorage.setItem("tata_rutas_access",fromLink);}catch(e){}
+    const frame=document.querySelector("#sams iframe.admin-frame");
+    if(frame)frame.src="admin.html?v=20261022-r7&access="+encodeURIComponent(fromLink);
+    p.delete("access");
+    const newSearch=p.toString();
+    history.replaceState(history.state,"",location.pathname+(newSearch?"?"+newSearch:"")+location.hash);
+  }
+})();
+</script>
 </body>
 </html>
