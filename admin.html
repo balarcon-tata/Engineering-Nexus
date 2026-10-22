@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TATA | Actualizar Rutas Activas</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.7.0/papaparse.min.js"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,Arial,sans-serif;color:#f8f9fa;background:#090b0f;display:grid;place-items:center;padding:20px}
 .card{width:min(780px,100%);border:1px solid #343942;border-radius:15px;background:#1b1d22;padding:clamp(18px,4vw,34px);box-shadow:0 25px 80px #0007}
@@ -20,13 +21,13 @@ progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color
 <body>
 <main class="card">
 <h1>Actualizar Rutas Activas</h1>
-<p>Carga el reporte <strong>DP070 - Rutas Activas.xlsx</strong>. Se tomarán los encabezados de la fila 2 y los datos desde la fila 3. La información anterior se conserva hasta completar y validar la importación.</p>
-<label for="excelFile">Archivo Excel</label>
-<input type="file" id="excelFile" accept=".xlsx,.xls">
+<p>Actualiza las rutas con <strong>CSV (recomendado)</strong> o Excel. Para CSV, se leen los encabezados en la primera fila; para Excel, en la fila 2. Los datos anteriores se conservan hasta finalizar la carga.</p>
+<label for="excelFile">Archivo CSV o Excel</label>
+<input type="file" id="excelFile" accept=".csv,.xlsx,.xls,text/csv">
 <button id="uploadBtn">Actualizar base de datos</button>
 <progress id="progress" max="100" value="0" hidden></progress>
 <div id="lastUpdate" class="status">Consultando última actualización...</div>
-<div id="status" class="status muted">Selecciona el archivo Excel y presiona Actualizar base de datos.</div>
+<div id="status" class="status muted">Selecciona un archivo CSV (preferible) o Excel y presiona Actualizar base de datos.</div>
 </main>
 <script>
 (() => {
