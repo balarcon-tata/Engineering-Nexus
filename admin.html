@@ -153,11 +153,24 @@ async function main(){
    await new Promise(resolve=>setTimeout(resolve,0));
   }
   status("Todas las filas cargadas. Aplicando actualización validada...");
-  const result=await send("finalize",key,{lote,total});
-  fraction(100);
-  await lastUpdate();
-  status("Actualización terminada correctamente.\nRegistros: "+Number(result.count).toLocaleString("es-GT")+
-    "\nArchivo: "+file.name,"ok");
+  await send("finalize",key,{lote,total});
+  fraction(96);
+  status("Archivo cargado. Supabase está aplicando la actualización. Verificando resultado...");
+  let completed=false;
+  for(let attempt=0;attempt<180;attempt++){
+    await new Promise(resolve=>setTimeout(resolve,2000));
+    const check=await send("status",key,{lote});
+    if(check.estado==="completed"){
+      completed=true;
+      fraction(100);
+      await lastUpdate();
+      status("Actualización completada correctamente.\nRegistros: "+Number(check.resultado).toLocaleString("es-GT")+"\nArchivo: "+file.name,"ok");
+      break;
+    }
+    if(check.estado==="failed")throw new Error(check.error||"Falló la aplicación final del lote.");
+    status("Archivo subido: "+total.toLocaleString("es-GT")+" registros.\nEstado: "+(check.estado==="pending"?"en cola":"aplicando cambios")+"\nLa tabla anterior permanece disponible hasta terminar.");
+  }
+  if(!completed)status("Archivo subido y en proceso. Puedes revisar la última actualización en la página más tarde.","warn");
  }catch(err){
   console.error("Fallo de importación:",err);
   status("No se completó la actualización.\n"+(err?.message||String(err))+
