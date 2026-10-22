@@ -1650,7 +1650,7 @@
           <div class="admin-loading">Cargando administrador...</div>
           <iframe
             class="admin-frame"
-            src="admin.html?v=20261022-r7"
+            src="admin.html?v=20261022-csv1"
             title="Actualizador de base de datos de SAMs"
             loading="lazy">
           </iframe>
@@ -1904,7 +1904,7 @@
   if(fromLink && /^[a-zA-Z0-9_-]{24,160}$/.test(fromLink)){
     try{localStorage.setItem("tata_rutas_access",fromLink);}catch(e){}
     const frame=document.querySelector("#sams iframe.admin-frame");
-    if(frame)frame.src="admin.html?v=20261022-r7&access="+encodeURIComponent(fromLink);
+    if(frame)frame.src="admin.html?v=20261022-csv1&access="+encodeURIComponent(fromLink);
     p.delete("access");
     const newSearch=p.toString();
     history.replaceState(history.state,"",location.pathname+(newSearch?"?"+newSearch:"")+location.hash);
