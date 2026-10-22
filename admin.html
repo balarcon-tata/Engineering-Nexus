@@ -21,15 +21,12 @@ progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color
 <main class="card">
 <h1>Actualizar Rutas Activas</h1>
 <p>Carga el reporte <strong>DP070 - Rutas Activas.xlsx</strong>. Se tomarán los encabezados de la fila 2 y los datos desde la fila 3. La información anterior se conserva hasta completar y validar la importación.</p>
-<label for="code">Código de actualización</label>
-<input id="code" type="password" placeholder="Pega el código de administración" autocomplete="off" spellcheck="false">
-<small>No necesitas recibir ningún enlace por correo. El código no se guarda en el navegador.</small>
 <label for="excelFile">Archivo Excel</label>
 <input type="file" id="excelFile" accept=".xlsx,.xls">
 <button id="uploadBtn">Actualizar base de datos</button>
 <progress id="progress" max="100" value="0" hidden></progress>
 <div id="lastUpdate" class="status">Consultando última actualización...</div>
-<div id="status" class="status muted">Selecciona el archivo y escribe el código para empezar.</div>
+<div id="status" class="status muted">Selecciona el archivo Excel y presiona Actualizar base de datos.</div>
 </main>
 <script>
 (() => {
@@ -37,7 +34,7 @@ progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color
 const URL_API="https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activas-importador";
 const SUPABASE_URL="https://ezhlltgcqektrclgzhfi.supabase.co";
 const SUPABASE_KEY="sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
-const codeInput=document.getElementById("code");
+const PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || "";
 const fileInput=document.getElementById("excelFile");
 const uploadBtn=document.getElementById("uploadBtn");
 const statusEl=document.getElementById("status");
@@ -106,9 +103,9 @@ function rowRecord(sheet,r){
  };
 }
 async function main(){
- const key=codeInput.value.trim();
+ const key=PRIVATE_ACCESS;
  const file=fileInput.files?.[0];
- if(!key){status("Escribe el código de actualización.","warn");return}
+ if(!key){status("Esta página necesita el enlace privado para actualizar la base. Abre el enlace de administración compartido contigo; no hace falta introducir códigos.","warn");return}
  if(!file){status("Selecciona primero el archivo DP070.","warn");return}
  uploadBtn.disabled=true;
  fraction(0);
@@ -164,7 +161,7 @@ async function main(){
   console.error("Fallo de importación:",err);
   status("No se completó la actualización.\n"+(err?.message||String(err))+
    "\n\nLos datos anteriores permanecen sin cambios si falló antes de la aplicación final.","error");
- }finally{uploadBtn.disabled=false;codeInput.value=""}
+ }finally{uploadBtn.disabled=false}
 }
 uploadBtn.addEventListener("click",main);
 lastUpdate();
