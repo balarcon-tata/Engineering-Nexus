@@ -100,6 +100,10 @@ function excelDate(x){
 }
 function normalize(x){return String(x??"").trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
 async function send(action, key, payload={}){
+ const {data:sessionInfo,error:sessionError}=await authClient.auth.getSession();
+ const token=sessionInfo?.session?.access_token;
+ if(sessionError||!token)throw new Error("La sesión administrativa expiró. Inicia sesión nuevamente.");
+ sessionToken=token;
  const response=await fetch(URL_API,{
   method:"POST",mode:"cors",cache:"no-store",
   headers:{"content-type":"application/json","authorization":"Bearer "+sessionToken},
