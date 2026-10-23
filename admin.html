@@ -17,11 +17,21 @@ button:disabled{opacity:.55;cursor:not-allowed}.status{border-radius:9px;padding
 .error{color:#ff9ba4}.ok{color:#a2e7c2}.warn{color:#ffd68c}.muted{color:#aeb5c2}
 progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color:#aeb5c2}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <main class="card">
 <h1>Actualizar Rutas Activas</h1>
 <p>Actualiza las rutas con <strong>CSV (recomendado)</strong> o Excel. Para CSV, se leen los encabezados en la primera fila; para Excel, en la fila 2. Los datos anteriores se conservan hasta finalizar la carga.</p>
+<div id="authPanel" class="status">
+  <strong>Acceso administrativo</strong>
+  <p>Inicia sesión una vez para mantener el acceso en este navegador.</p>
+  <input type="email" id="adminEmail" value="dmonroy@tata.com.gt" readonly>
+  <input type="password" id="adminPassword" autocomplete="current-password" placeholder="Contraseña de tu cuenta corporativa" style="margin-top:9px">
+  <button type="button" id="signinBtn">Iniciar sesión</button>
+  <p id="authMessage"></p>
+</div>
+<div id="loggedPanel" class="status ok" hidden>Sesión administrativa activa. <button type="button" id="signoutBtn" style="width:auto;padding:0 14px;min-height:35px;margin:0 0 0 8px;">Cerrar sesión</button></div>
 <label for="excelFile">Archivo CSV o Excel</label>
 <input type="file" id="excelFile" accept=".csv,.xlsx,.xls,text/csv">
 <button id="uploadBtn">Actualizar base de datos</button>
@@ -35,8 +45,8 @@ progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color
 const URL_API="https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activas-importador";
 const SUPABASE_URL="https://ezhlltgcqektrclgzhfi.supabase.co";
 const SUPABASE_KEY="sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
-let PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || new URLSearchParams(location.search).get("access") || localStorage.getItem("tata_rutas_access") || "";
-if(PRIVATE_ACCESS) { try { localStorage.setItem("tata_rutas_access",PRIVATE_ACCESS); } catch(_) {} }
+const authClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+let sessionToken="";
 const fileInput=document.getElementById("excelFile");
 const uploadBtn=document.getElementById("uploadBtn");
 const statusEl=document.getElementById("status");
@@ -44,44 +54,33 @@ const lastEl=document.getElementById("lastUpdate");
 const progress=document.getElementById("progress");
 function status(msg,kind=""){statusEl.className="status "+kind;statusEl.textContent=msg}
 function fraction(num){progress.hidden=false;progress.value=Math.max(0,Math.min(100,num))}
-const accessHint=document.createElement("div");
-accessHint.className="status muted";
-accessHint.style.marginTop="12px";
-const fileLabel=document.querySelector('label[for="excelFile"]');
-if(fileLabel) fileLabel.before(accessHint);
-function updateAccessHint(message,kind){
- accessHint.className="status "+kind;
- accessHint.textContent=message;
+const authPanel=document.getElementById("authPanel");
+const loggedPanel=document.getElementById("loggedPanel");
+const authMessage=document.getElementById("authMessage");
+const signinBtn=document.getElementById("signinBtn");
+const signoutBtn=document.getElementById("signoutBtn");
+async function updateAuth(){
+ const {data}=await authClient.auth.getSession();
+ sessionToken=data?.session?.access_token||"";
+ const isAdmin=Boolean(sessionToken&&data.session.user?.email?.toLowerCase()==="dmonroy@tata.com.gt");
+ authPanel.hidden=isAdmin;
+ loggedPanel.hidden=!isAdmin;
+ uploadBtn.disabled=!isAdmin;
+ if(!isAdmin)status("Inicia sesión para actualizar las rutas. No necesitas enlaces privados.","muted");
 }
-async function checkAccess(){
- if(!PRIVATE_ACCESS){
-  updateAccessHint("Carga deshabilitada en este navegador: abre aquí una vez el enlace privado de Engineering Nexus para habilitarla. No hace falta escribir ningún código.","warn");
-  return;
- }
- updateAccessHint("Comprobando autorización para cargar rutas...","muted");
- try{
-  await send("verify",PRIVATE_ACCESS);
-  try{localStorage.setItem("tata_rutas_access",PRIVATE_ACCESS)}catch(e){}
-  updateAccessHint("Acceso de actualización habilitado en este navegador.","ok");
- }catch(e){
-  updateAccessHint("La autorización guardada no es válida: "+(e.message||String(e))+". Reabre el enlace privado para habilitar este navegador.","error");
- }
-}
-window.addEventListener("message",event=>{
- if(event.origin!==location.origin||event.source!==window.parent)return;
- if(event.data?.type!=="nexus-rutas-access"||typeof event.data.access!=="string")return;
- const received=event.data.access;
- if(!/^[a-zA-Z0-9_-]{24,180}$/.test(received))return;
- if(PRIVATE_ACCESS===received)return;
- PRIVATE_ACCESS=received;
- checkAccess();
+signinBtn.addEventListener("click",async()=>{
+ const password=document.getElementById("adminPassword").value;
+ if(!password){authMessage.textContent="Introduce la contraseña de tu cuenta.";return;}
+ signinBtn.disabled=true;
+ const {error}=await authClient.auth.signInWithPassword({email:"dmonroy@tata.com.gt",password});
+ document.getElementById("adminPassword").value="";
+ authMessage.textContent=error?"No se pudo iniciar sesión: "+error.message:"";
+ signinBtn.disabled=false;
+ await updateAuth();
 });
-try{
- if(window.parent && window.parent!==window){
-  window.parent.postMessage({type:"nexus-rutas-ready"},location.origin);
- }
-}catch(e){}
-checkAccess();
+signoutBtn.addEventListener("click",async()=>{await authClient.auth.signOut();await updateAuth();});
+authClient.auth.onAuthStateChange(()=>{setTimeout(updateAuth,0)});
+updateAuth();
 function cleanNumber(x){
  if(x===null||x===undefined||x==="")return null;
  const n=typeof x==="number"?x:Number(String(x).trim().replace(",","."));
@@ -103,7 +102,7 @@ function normalize(x){return String(x??"").trim().normalize("NFD").replace(/[\u0
 async function send(action, key, payload={}){
  const response=await fetch(URL_API,{
   method:"POST",mode:"cors",cache:"no-store",
-  headers:{"content-type":"application/json","x-rutas-secret":key},
+  headers:{"content-type":"application/json","authorization":"Bearer "+sessionToken},
   body:JSON.stringify({action,...payload})
  });
  let info;
@@ -234,9 +233,9 @@ async function uploadCsv(file,key){
 }
 
 async function main(){
- const key=PRIVATE_ACCESS;
+ const key=sessionToken;
  const file=fileInput.files?.[0];
- if(!key){status("Este navegador todavía no tiene autorización de carga. Abre una vez el enlace privado en este mismo navegador y vuelve a intentar.","warn");return}
+ if(!key){status("Inicia sesión para actualizar las rutas.","warn");return}
  if(!file){status("Selecciona primero el archivo DP070.","warn");return}
  uploadBtn.disabled=true;
  fraction(0);
