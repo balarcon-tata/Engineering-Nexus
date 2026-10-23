@@ -1650,7 +1650,7 @@
           <div class="admin-loading">Cargando administrador...</div>
           <iframe
             class="admin-frame"
-            src="admin.html?v=20261022-csv1"
+            src="admin.html?v=20261022-auth2"
             title="Actualizador de base de datos de SAMs"
             loading="lazy">
           </iframe>
@@ -1897,18 +1897,48 @@
 </script>
 
 
+
 <script>
 (function(){
-  const p=new URLSearchParams(location.search);
-  const fromLink=p.get("access");
-  if(fromLink && /^[a-zA-Z0-9_-]{24,160}$/.test(fromLink)){
-    try{localStorage.setItem("tata_rutas_access",fromLink);}catch(e){}
-    const frame=document.querySelector("#sams iframe.admin-frame");
-    if(frame)frame.src="admin.html?v=20261022-csv1&access="+encodeURIComponent(fromLink);
-    p.delete("access");
-    const newSearch=p.toString();
-    history.replaceState(history.state,"",location.pathname+(newSearch?"?"+newSearch:"")+location.hash);
-  }
+  const frame=document.querySelector("#sams iframe.admin-frame");
+  if(!frame)return;
+  const query=new URLSearchParams(location.search);
+  const fromLink=query.get("access") || "";
+  const tokenPattern=/^[a-zA-Z0-9_-]{24,160}$/;
+  let access="";
+  try{access=localStorage.getItem("tata_rutas_access")||""}catch(e){}
+  if(tokenPattern.test(fromLink))access=fromLink;
+  const transfer=()=>{
+    if(access && frame.contentWindow)frame.contentWindow.postMessage({type:"nexus-rutas-access",access},location.origin);
+  };
+  frame.addEventListener("load",transfer);
+  window.addEventListener("message",event=>{
+    if(event.origin!==location.origin||event.source!==frame.contentWindow)return;
+    if(event.data?.type==="nexus-rutas-ready")transfer();
+  });
+  if(!tokenPattern.test(access))return;
+  (async()=>{
+    try{
+      const response=await fetch("https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activas-importador",{
+        method:"POST",headers:{"content-type":"application/json","x-rutas-secret":access},
+        body:JSON.stringify({action:"verify"}),cache:"no-store"
+      });
+      const result=await response.json();
+      if(!response.ok || !result.ok)throw new Error(result.error||"Acceso no habilitado");
+      try{localStorage.setItem("tata_rutas_access",access)}catch(e){}
+      transfer();
+      if(tokenPattern.test(fromLink)){
+        query.delete("access");
+        const remaining=query.toString();
+        try{history.replaceState(history.state,"",location.pathname+(remaining?"?"+remaining:"")+location.hash)}catch(e){}
+      }
+    }catch(error){
+      console.warn("No se pudo verificar el permiso para actualizar rutas:",error?.message||error);
+      // Never persist a rejected token.
+      try{localStorage.removeItem("tata_rutas_access")}catch(e){}
+      access="";
+    }
+  })();
 })();
 </script>
 </body>
