@@ -35,7 +35,7 @@ progress{width:100%;margin-top:15px;height:13px;accent-color:#ff4255}small{color
 const URL_API="https://ezhlltgcqektrclgzhfi.supabase.co/functions/v1/rutas-activas-importador";
 const SUPABASE_URL="https://ezhlltgcqektrclgzhfi.supabase.co";
 const SUPABASE_KEY="sb_publishable_QnmVt7kK6LTX6HqY3eJcUg_wTN-O6Hp";
-const PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || new URLSearchParams(location.search).get("access") || localStorage.getItem("tata_rutas_access") || "";
+let PRIVATE_ACCESS = new URLSearchParams(location.hash.slice(1)).get("access") || new URLSearchParams(location.search).get("access") || localStorage.getItem("tata_rutas_access") || "";
 if(PRIVATE_ACCESS) { try { localStorage.setItem("tata_rutas_access",PRIVATE_ACCESS); } catch(_) {} }
 const fileInput=document.getElementById("excelFile");
 const uploadBtn=document.getElementById("uploadBtn");
@@ -44,6 +44,44 @@ const lastEl=document.getElementById("lastUpdate");
 const progress=document.getElementById("progress");
 function status(msg,kind=""){statusEl.className="status "+kind;statusEl.textContent=msg}
 function fraction(num){progress.hidden=false;progress.value=Math.max(0,Math.min(100,num))}
+const accessHint=document.createElement("div");
+accessHint.className="status muted";
+accessHint.style.marginTop="12px";
+const fileLabel=document.querySelector('label[for="excelFile"]');
+if(fileLabel) fileLabel.before(accessHint);
+function updateAccessHint(message,kind){
+ accessHint.className="status "+kind;
+ accessHint.textContent=message;
+}
+async function checkAccess(){
+ if(!PRIVATE_ACCESS){
+  updateAccessHint("Carga deshabilitada en este navegador: abre aquí una vez el enlace privado de Engineering Nexus para habilitarla. No hace falta escribir ningún código.","warn");
+  return;
+ }
+ updateAccessHint("Comprobando autorización para cargar rutas...","muted");
+ try{
+  await send("verify",PRIVATE_ACCESS);
+  try{localStorage.setItem("tata_rutas_access",PRIVATE_ACCESS)}catch(e){}
+  updateAccessHint("Acceso de actualización habilitado en este navegador.","ok");
+ }catch(e){
+  updateAccessHint("La autorización guardada no es válida: "+(e.message||String(e))+". Reabre el enlace privado para habilitar este navegador.","error");
+ }
+}
+window.addEventListener("message",event=>{
+ if(event.origin!==location.origin||event.source!==window.parent)return;
+ if(event.data?.type!=="nexus-rutas-access"||typeof event.data.access!=="string")return;
+ const received=event.data.access;
+ if(!/^[a-zA-Z0-9_-]{24,180}$/.test(received))return;
+ if(PRIVATE_ACCESS===received)return;
+ PRIVATE_ACCESS=received;
+ checkAccess();
+});
+try{
+ if(window.parent && window.parent!==window){
+  window.parent.postMessage({type:"nexus-rutas-ready"},location.origin);
+ }
+}catch(e){}
+checkAccess();
 function cleanNumber(x){
  if(x===null||x===undefined||x==="")return null;
  const n=typeof x==="number"?x:Number(String(x).trim().replace(",","."));
@@ -198,7 +236,7 @@ async function uploadCsv(file,key){
 async function main(){
  const key=PRIVATE_ACCESS;
  const file=fileInput.files?.[0];
- if(!key){status("Esta página necesita el enlace privado para actualizar la base. Abre el enlace de administración compartido contigo; no hace falta introducir códigos.","warn");return}
+ if(!key){status("Este navegador todavía no tiene autorización de carga. Abre una vez el enlace privado en este mismo navegador y vuelve a intentar.","warn");return}
  if(!file){status("Selecciona primero el archivo DP070.","warn");return}
  uploadBtn.disabled=true;
  fraction(0);
